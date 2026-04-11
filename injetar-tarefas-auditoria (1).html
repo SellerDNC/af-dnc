@@ -1,0 +1,146 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>DNC Flow — Injetor de Tarefas de Auditoria</title>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:Inter,sans-serif;background:#1a0e05;color:#f5ede6;padding:24px;min-height:100vh}
+h1{font-size:18px;font-weight:800;color:#e07428;margin-bottom:4px}
+.sub{font-size:12px;color:#9a7060;margin-bottom:24px}
+.card{background:#2e1a09;border:1px solid rgba(255,255,255,.08);border-radius:12px;padding:16px;margin-bottom:12px}
+.tag{display:inline-block;padding:2px 8px;border-radius:6px;font-size:10px;font-weight:700;margin-right:4px}
+.alta{background:rgba(239,68,68,.2);color:#ef4444}
+.media{background:rgba(245,158,11,.2);color:#f59e0b}
+.baixa{background:rgba(34,197,94,.2);color:#22c55e}
+.title{font-size:13px;font-weight:700;margin:6px 0 3px}
+.desc{font-size:11px;color:#9a7060;line-height:1.5}
+button{padding:14px 24px;background:#e07428;border:none;border-radius:10px;font-size:14px;font-weight:700;color:#1a0e05;cursor:pointer;width:100%;font-family:Inter,sans-serif;margin-top:8px}
+button:disabled{opacity:.5;cursor:not-allowed}
+#status{padding:16px;border-radius:10px;font-size:13px;font-weight:600;margin-top:12px;display:none}
+.ok{background:rgba(34,197,94,.15);border:1px solid rgba(34,197,94,.3);color:#22c55e}
+.err{background:rgba(239,68,68,.15);border:1px solid rgba(239,68,68,.3);color:#ef4444}
+.warn{background:rgba(245,158,11,.15);border:1px solid rgba(245,158,11,.3);color:#f59e0b}
+</style>
+</head>
+<body>
+<h1>🔍 Injetor de Tarefas — Auditoria DNC Flow</h1>
+<div class="sub">Clique em "Injetar tarefas" para criar todas as tarefas de auditoria no app. Executa uma única vez.</div>
+
+<div id="task-list"></div>
+<button id="btn" onclick="injetar()">🚀 Injetar todas as tarefas no DNC Flow</button>
+<div id="status"></div>
+
+<script>
+const SUPABASE_URL='https://zyidoasvvutddutyezwj.supabase.co';
+const SUPABASE_KEY='sb_publishable_nkRlbfzMKrsc-6pScUsjlg_VleZP0iy';
+const sb=supabase.createClient(SUPABASE_URL,SUPABASE_KEY);
+
+function gid(){return 'aud'+Date.now().toString(36)+Math.random().toString(36).slice(2,5)}
+const today=()=>new Date().toISOString().slice(0,10);
+const d7=()=>new Date(Date.now()+7*864e5).toISOString().slice(0,10);
+
+const TASKS=[
+  // BUGS
+  {prio:'alta',title:'[BUG] Painel de precificacao nao fecha ao trocar de secao',desc:'nav() nao chama closePrecPanel() — painel fica aberto sobre outras telas ao navegar. Adicionar closePrecPanel() no inicio da funcao nav().'},
+  {prio:'alta',title:'[BUG] mobile.html nao sincroniza tarefas e contas com Supabase',desc:'Dados criados no mobile ficam apenas no localStorage do celular. Adicionar sbUpsert() nas funcoes salvarTarefa() e salvarConta() do mobile.html.'},
+  {prio:'alta',title:'[BUG] Calendario nao exibe contas recorrentes futuras',desc:'renderCalendar() pode nao projetar ocorrencias futuras de contas recorrentes. Verificar e corrigir logica de projecao no calendario.'},
+  {prio:'alta',title:'[BUG] Token ML pode expirar sem aviso e quebrar integracao',desc:'mlExp existe mas sem verificacao antes das chamadas. Adicionar check: se token expirado, mostrar aviso e redirecionar para reconexao ML automaticamente.'},
+  // SEGURANÇA
+  {prio:'alta',title:'[SEGURANÇA] mobile.html sem PIN — dados expostos sem autenticacao',desc:'Qualquer pessoa com a URL af-dnc.pages.dev/mobile.html acessa todos os dados. Implementar PIN identico ao desktop no arquivo mobile.html.'},
+  {prio:'media',title:'[SEGURANÇA] Confirmar RLS ativa nas novas tabelas Supabase',desc:'Verificar Row Level Security em: dnc_titulo_grupos, dnc_estoque_mov, dnc_ml_orders, dnc_cost_fields, dnc_produtos. Acessar Supabase > Authentication > Policies.'},
+  {prio:'media',title:'[SEGURANÇA] Diagnostico e Ficha Tecnica chamam ML API direto do frontend',desc:'5 chamadas diretas a api.mercadolibre.com expoe o token Bearer no Network tab. Mover para Cloudflare Worker na Fase 2. Prioridade media para Fase 1.'},
+  // FRAGILIDADES
+  {prio:'media',title:'[FRAGILIDADE] 29 funcoes async sem try/catch — erros silenciosos',desc:'Funcoes de ranking, estoque, titulos e diagnostico falham sem feedback. Adicionar try/catch com setSyncStatus("err") nos blocos descobertos.'},
+  {prio:'media',title:'[FRAGILIDADE] Funcoes de save sem debounce — risco de race condition',desc:'saveTasks, saveContas, saveEstoque chamadas simultaneamente podem causar inconsistencia no Supabase. Implementar debounce de 300ms ou flag isSaving.'},
+  {prio:'baixa',title:'[FRAGILIDADE] localStorage sem controle de quota (limite 5MB)',desc:'Com historico de ML orders e dados acumulados pode atingir o limite do browser. Monitorar tamanho e implementar limpeza de dados com mais de 180 dias.'},
+  {prio:'baixa',title:'[FRAGILIDADE] ML orders podem acumular indefinidamente no Supabase',desc:'Tabela dnc_ml_orders cresce sem limite. Implementar rotina de limpeza de registros com mais de 180 dias ou estrategia de paginacao mais eficiente.'},
+  // PENDENTES
+  {prio:'media',title:'[PENDENTE] Modulo de Impressao de Etiquetas de Produtos',desc:'Ultima planilha nao convertida: DNC_Impressao_de_Etiquetas. Gerar etiquetas para impressao a partir dos SKUs do catalogo, integrado ao modulo Produtos.'},
+  {prio:'baixa',title:'[PENDENTE] GMV e Ponto de Equilibrio da planilha Precificacao',desc:'Aba GMV da planilha calcula faturamento alvo, custos fixos/variaveis e resultado liquido mensal. Implementar como dashboard financeiro complementar.'},
+  {prio:'media',title:'[PENDENTE] Integracao Google Calendar no mobile.html',desc:'Implementar Google Identity Services para criar eventos do Google Calendar a partir de tarefas e contas. Requer Client ID do Google Cloud Console.'},
+  // MANUTENÇÃO
+  {prio:'baixa',title:'[MANUTENCAO] Model Claude hardcoded no mobile.html',desc:'mobile.html usa claude-sonnet-4-20250514 fixo. Unificar com constante MODEL_CLAUDE compartilhada para facilitar atualizacoes futuras.'},
+  {prio:'baixa',title:'[LIMPEZA] Remover logica de migracao de IDs hardcoded e1-e25 de estoque',desc:'Codigo ainda tem referencias e logica de limpeza dos IDs antigos de estoque. Remover apos confirmar que dados migraram corretamente para todos os usuarios.'},
+];
+
+// Render preview
+const list=document.getElementById('task-list');
+list.innerHTML=TASKS.map(t=>`
+  <div class="card">
+    <span class="tag ${t.prio}">${t.prio.toUpperCase()}</span>
+    <div class="title">${t.title}</div>
+    <div class="desc">${t.desc}</div>
+  </div>
+`).join('');
+
+async function injetar(){
+  const btn=document.getElementById('btn');
+  const status=document.getElementById('status');
+  btn.disabled=true;
+  btn.textContent='Injetando...';
+  status.style.display='block';
+  status.className='warn';
+  status.textContent='Conectando ao Supabase e carregando tarefas existentes...';
+
+  try{
+    // Load existing tasks
+    const{data,error}=await sb.from('dnc_tasks').select('data').eq('id','andre_godoy').single();
+    let existing=[];
+    if(!error&&data?.data){
+      try{existing=JSON.parse(data.data);}catch(e){}
+    }
+    status.textContent=`Carregadas ${existing.length} tarefas existentes. Adicionando ${TASKS.length} novas...`;
+
+    // Check for duplicates by title prefix
+    const existingTitles=new Set(existing.map(t=>(t.title||'').slice(0,30)));
+    const toAdd=TASKS.filter(t=>!existingTitles.has(t.title.slice(0,30)));
+
+    if(toAdd.length===0){
+      status.className='ok';
+      status.textContent='✓ Todas as tarefas de auditoria ja existem. Nenhuma duplicata criada.';
+      btn.textContent='Ja injetado anteriormente';
+      return;
+    }
+
+    const today_=new Date().toISOString().slice(0,10);
+    const d7_=new Date(Date.now()+7*864e5).toISOString().slice(0,10);
+    const bugDate=t=>t.prio==='alta'?today_:t.prio==='media'?d7_:null;
+
+    const newTasks=toAdd.map(t=>({
+      id:gid(),
+      col:'todo',
+      area:'dnc-digital',
+      prio:t.prio,
+      title:t.title,
+      desc:t.desc,
+      date:bugDate(t)||'',
+      resp:'andre',
+    }));
+
+    const merged=[...existing,...newTasks];
+    const{error:err2}=await sb.from('dnc_tasks').upsert({id:'andre_godoy',data:JSON.stringify(merged)},{onConflict:'id'});
+
+    if(err2){
+      status.className='err';
+      status.textContent='Erro ao salvar: '+JSON.stringify(err2);
+      btn.disabled=false;btn.textContent='Tentar novamente';
+      return;
+    }
+
+    status.className='ok';
+    status.innerHTML=`✅ ${newTasks.length} tarefas de auditoria criadas com sucesso!<br>
+      <span style="font-size:11px;opacity:.8">Abra o DNC Flow e va em Tarefas > Kanban para ver todas.</span>`;
+    btn.textContent='✓ Concluido — pode fechar esta pagina';
+
+  }catch(e){
+    status.className='err';
+    status.textContent='Erro: '+e.message;
+    btn.disabled=false;btn.textContent='Tentar novamente';
+  }
+}
+</script>
+</body>
+</html>
