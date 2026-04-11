@@ -1,0 +1,923 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<title>DNC Flow</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><defs><linearGradient id='bg' x1='0' y1='0' x2='1' y2='1'><stop offset='0%25' stop-color='%23ff9145'/><stop offset='100%25' stop-color='%23c85510'/></linearGradient></defs><rect width='32' height='32' rx='7' fill='url(%23bg)'/><path d='M3 18 C7 18 9 7 15 7 S21 19 25 19 C27 19 28 16 29 14' stroke='white' stroke-width='3' fill='none' stroke-linecap='round' stroke-linejoin='round'/><circle cx='29' cy='14' r='2.8' fill='white'/><circle cx='3' cy='18' r='1.8' fill='white' opacity='0.6'/></svg>">
+<meta property="og:title" content="DNC Flow Mobile">
+<meta property="og:description" content="Gestao DNC no celular — dashboard, tarefas, contas e MercadoX.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<style>
+*{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
+:root{
+  --bg:#1a0e05;--bg2:#231408;--bg3:#2e1a09;
+  --card:#2e1a09;--card2:#3a2010;
+  --border:rgba(255,255,255,.08);--border2:rgba(255,255,255,.12);
+  --text:#f5ede6;--text2:#c8a898;--text3:#9a7060;
+  --accent:#e07428;--accent2:#ff9145;
+  --green:#22c55e;--red:#ef4444;--amber:#f59e0b;--blue:#3b82f6;--purple:#8b5cf6;
+  --font:'Inter',sans-serif;
+  --nav-h:64px;
+  --safe-b:env(safe-area-inset-bottom,0px);
+}
+html,body{height:100%;background:var(--bg);color:var(--text);font-family:var(--font);overflow:hidden}
+.app{display:flex;flex-direction:column;height:100%;max-width:430px;margin:0 auto;position:relative}
+
+/* TOP BAR */
+.topbar{
+  display:flex;align-items:center;justify-content:space-between;
+  padding:16px 18px 12px;
+  background:var(--bg);
+  padding-top:calc(16px + env(safe-area-inset-top,0px));
+  flex-shrink:0;
+}
+.topbar-logo{font-size:18px;font-weight:900;letter-spacing:-.5px}
+.topbar-logo span{color:var(--accent)}
+.sync-dot{width:8px;height:8px;border-radius:50%;background:var(--green)}
+.sync-dot.err{background:var(--red)}
+.sync-dot.syncing{background:var(--amber);animation:pulse 1s infinite}
+
+/* CONTENT */
+.content{flex:1;overflow-y:auto;overflow-x:hidden;-webkit-overflow-scrolling:touch;padding:0 0 calc(var(--nav-h) + var(--safe-b) + 8px)}
+.content::-webkit-scrollbar{display:none}
+.page{padding:12px 16px;display:flex;flex-direction:column;gap:12px}
+.page.hidden{display:none}
+
+/* BOTTOM NAV */
+.bottom-nav{
+  position:fixed;bottom:0;left:50%;transform:translateX(-50%);
+  width:100%;max-width:430px;
+  display:flex;align-items:center;
+  background:rgba(26,14,5,.95);
+  backdrop-filter:blur(20px);
+  -webkit-backdrop-filter:blur(20px);
+  border-top:1px solid var(--border2);
+  padding-bottom:var(--safe-b);
+  z-index:100;
+}
+.nav-btn{
+  flex:1;display:flex;flex-direction:column;align-items:center;gap:3px;
+  padding:10px 4px;cursor:pointer;border:none;background:none;
+  color:var(--text3);font-family:var(--font);transition:color .15s;
+  position:relative;
+}
+.nav-btn.active{color:var(--accent)}
+.nav-btn .nav-icon{font-size:20px;line-height:1}
+.nav-btn .nav-label{font-size:10px;font-weight:600;letter-spacing:.02em}
+.nav-badge{
+  position:absolute;top:6px;right:calc(50% - 16px);
+  background:var(--red);color:#fff;border-radius:8px;
+  font-size:9px;font-weight:800;padding:1px 5px;min-width:16px;text-align:center;
+}
+
+/* CARDS */
+.card{background:var(--card);border:1px solid var(--border);border-radius:14px;padding:14px}
+.card-title{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:var(--text3);margin-bottom:10px}
+.card-value{font-size:28px;font-weight:900;color:var(--text)}
+.card-sub{font-size:11px;color:var(--text3);margin-top:2px}
+.cards-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+
+/* SECTION HEADER */
+.sec-hdr{display:flex;align-items:center;justify-content:space-between;margin-bottom:8px}
+.sec-title{font-size:13px;font-weight:700;color:var(--text)}
+.sec-action{font-size:12px;color:var(--accent);background:none;border:none;cursor:pointer;font-family:var(--font);font-weight:600}
+
+/* ITEMS */
+.item{
+  background:var(--card);border:1px solid var(--border);border-radius:12px;
+  padding:13px 14px;display:flex;align-items:center;gap:12px;
+  cursor:pointer;transition:background .12s;
+}
+.item:active{background:var(--card2)}
+.item-icon{font-size:20px;flex-shrink:0}
+.item-body{flex:1;min-width:0}
+.item-title{font-size:13px;font-weight:600;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.item-sub{font-size:11px;color:var(--text3);margin-top:2px}
+.item-right{text-align:right;flex-shrink:0}
+.item-val{font-size:14px;font-weight:700}
+.item-date{font-size:10px;color:var(--text3)}
+
+/* BADGES */
+.badge{display:inline-flex;align-items:center;padding:2px 8px;border-radius:8px;font-size:10px;font-weight:700}
+.badge-green{background:rgba(34,197,94,.15);color:var(--green)}
+.badge-red{background:rgba(239,68,68,.15);color:var(--red)}
+.badge-amber{background:rgba(245,158,11,.15);color:var(--amber)}
+.badge-blue{background:rgba(59,130,246,.15);color:var(--blue)}
+.badge-gray{background:rgba(154,112,96,.15);color:var(--text3)}
+
+/* PRIO DOT */
+.prio{width:8px;height:8px;border-radius:50%;flex-shrink:0}
+.prio-alta{background:var(--red)}
+.prio-media{background:var(--amber)}
+.prio-baixa{background:var(--green)}
+
+/* DONE LINE */
+.item.done .item-title{text-decoration:line-through;color:var(--text3)}
+
+/* CHECKBOX */
+.chk{
+  width:22px;height:22px;border-radius:6px;border:2px solid var(--border2);
+  background:transparent;flex-shrink:0;display:flex;align-items:center;justify-content:center;
+  cursor:pointer;transition:all .15s;
+}
+.chk.checked{background:var(--accent);border-color:var(--accent);color:#fff;font-size:12px}
+
+/* BUTTON */
+.btn-primary{
+  width:100%;padding:14px;background:var(--accent);border:none;border-radius:12px;
+  font-size:15px;font-weight:700;color:#1a0e05;cursor:pointer;font-family:var(--font);
+  transition:opacity .15s;
+}
+.btn-primary:active{opacity:.85}
+.btn-sec{
+  padding:10px 16px;background:transparent;border:1px solid var(--border2);
+  border-radius:10px;font-size:13px;font-weight:600;color:var(--text2);
+  cursor:pointer;font-family:var(--font);
+}
+
+/* FAB */
+.fab{
+  position:fixed;right:16px;
+  bottom:calc(var(--nav-h) + var(--safe-b) + 16px);
+  width:52px;height:52px;border-radius:50%;
+  background:linear-gradient(135deg,var(--accent2),var(--accent));
+  border:none;color:#1a0e05;font-size:24px;cursor:pointer;
+  box-shadow:0 4px 20px rgba(224,116,40,.4);
+  display:flex;align-items:center;justify-content:center;
+  z-index:90;transition:transform .15s;
+}
+.fab:active{transform:scale(.92)}
+
+/* MODAL */
+.mo-overlay{
+  position:fixed;inset:0;background:rgba(0,0,0,.7);
+  display:flex;align-items:flex-end;z-index:200;
+  backdrop-filter:blur(4px);
+}
+.mo-sheet{
+  background:var(--bg2);border:1px solid var(--border2);
+  border-radius:20px 20px 0 0;width:100%;max-width:430px;margin:0 auto;
+  padding:0 0 calc(20px + var(--safe-b));
+  max-height:90vh;overflow-y:auto;
+}
+.mo-handle{width:36px;height:4px;background:var(--border2);border-radius:2px;margin:12px auto 16px}
+.mo-title{font-size:16px;font-weight:800;padding:0 18px 14px;border-bottom:1px solid var(--border)}
+.mo-body{padding:16px 18px;display:flex;flex-direction:column;gap:12px}
+.mo-footer{padding:0 18px;display:flex;gap:10px;margin-top:4px}
+.f{display:flex;flex-direction:column;gap:5px}
+.f label{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--text3)}
+.f input,.f select,.f textarea{
+  background:var(--bg3);border:1px solid var(--border2);border-radius:10px;
+  padding:11px 13px;font-size:14px;color:var(--text);font-family:var(--font);
+  outline:none;transition:border-color .12s;width:100%;
+}
+.f input:focus,.f select:focus,.f textarea:focus{border-color:var(--accent)}
+.f select option{background:var(--bg3)}
+.f-row{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+
+/* CALENDAR */
+.cal-grid{display:grid;grid-template-columns:repeat(7,1fr);gap:2px}
+.cal-dow{font-size:10px;font-weight:700;text-align:center;color:var(--text3);padding:4px 0}
+.cal-day{
+  aspect-ratio:1;display:flex;flex-direction:column;align-items:center;
+  justify-content:center;border-radius:10px;font-size:13px;font-weight:600;
+  cursor:pointer;gap:3px;color:var(--text2);transition:background .12s;
+  position:relative;
+}
+.cal-day:active{background:var(--card2)}
+.cal-day.today{background:var(--accent);color:#1a0e05;font-weight:900}
+.cal-day.selected{background:var(--card2);border:1px solid var(--accent)}
+.cal-day.other-month{color:var(--text3);opacity:.4}
+.cal-dots{display:flex;gap:2px;justify-content:center}
+.cal-dot{width:4px;height:4px;border-radius:50%}
+.cal-nav{display:flex;align-items:center;justify-content:space-between;margin-bottom:14px}
+.cal-month{font-size:16px;font-weight:800}
+.cal-arrow{background:none;border:none;color:var(--text2);font-size:20px;cursor:pointer;padding:4px 12px;font-family:var(--font)}
+
+/* MercadoX */
+.mx-result{background:var(--card);border:1px solid var(--border);border-radius:14px;padding:14px;white-space:pre-wrap;font-size:13px;line-height:1.6;color:var(--text2)}
+.mx-verdict{display:flex;align-items:center;gap:10px;padding:12px 14px;border-radius:12px;margin-bottom:10px}
+.mx-verdict.aprovado{background:rgba(34,197,94,.1);border:1px solid rgba(34,197,94,.2)}
+.mx-verdict.reprovado{background:rgba(239,68,68,.1);border:1px solid rgba(239,68,68,.2)}
+.mx-verdict.revisar{background:rgba(245,158,11,.1);border:1px solid rgba(245,158,11,.2)}
+
+/* DAY EVENTS */
+.day-event{
+  display:flex;align-items:center;gap:10px;padding:10px 12px;
+  background:var(--card2);border-radius:10px;
+}
+
+/* SPIN */
+@keyframes spin{to{transform:rotate(360deg)}}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.5}}
+.spin{display:inline-block;width:20px;height:20px;border:2px solid rgba(224,116,40,.3);border-top-color:var(--accent);border-radius:50%;animation:spin 1s linear infinite}
+
+/* EMPTY */
+.empty{text-align:center;padding:32px 16px;color:var(--text3)}
+.empty-icon{font-size:32px;margin-bottom:8px}
+.empty-text{font-size:13px}
+
+/* TABS (contas) */
+.tabs{display:flex;gap:4px;background:var(--bg3);border-radius:10px;padding:3px;margin-bottom:12px}
+.tab{flex:1;padding:8px;border:none;border-radius:8px;font-size:12px;font-weight:700;cursor:pointer;font-family:var(--font);background:transparent;color:var(--text3);transition:all .15s}
+.tab.active{background:var(--accent);color:#1a0e05}
+
+/* SWIPE HINT */
+.swipe-hint{font-size:10px;color:var(--text3);text-align:center;padding-bottom:4px}
+</style>
+</head>
+<body>
+<div class="app">
+  <!-- TOP BAR -->
+  <div class="topbar">
+    <div class="topbar-logo">DNC<span>flow</span></div>
+    <div style="display:flex;align-items:center;gap:8px">
+      <span style="font-size:11px;color:var(--text3)" id="sync-label">Sincronizando...</span>
+      <div class="sync-dot syncing" id="sync-dot"></div>
+    </div>
+  </div>
+
+  <!-- CONTENT -->
+  <div class="content">
+    <!-- DASHBOARD -->
+    <div class="page" id="page-dash">
+      <div id="dash-greeting" style="font-size:15px;font-weight:700;color:var(--text2)"></div>
+
+      <!-- Summary cards -->
+      <div class="cards-grid" id="dash-cards"></div>
+
+      <!-- Tasks today -->
+      <div>
+        <div class="sec-hdr">
+          <div class="sec-title">Tarefas de hoje</div>
+          <button class="sec-action" onclick="navTo('tasks')">Ver todas</button>
+        </div>
+        <div id="dash-tasks-today" style="display:flex;flex-direction:column;gap:8px"></div>
+      </div>
+
+      <!-- Bills due -->
+      <div>
+        <div class="sec-hdr">
+          <div class="sec-title">Contas proximas</div>
+          <button class="sec-action" onclick="navTo('contas')">Ver todas</button>
+        </div>
+        <div id="dash-bills" style="display:flex;flex-direction:column;gap:8px"></div>
+      </div>
+    </div>
+
+    <!-- MERCADOX -->
+    <div class="page hidden" id="page-mx">
+      <div class="card">
+        <div class="card-title">MercadoX — Analise de Produto</div>
+        <div class="f" style="margin-bottom:10px">
+          <label>URL ou descricao do produto</label>
+          <textarea id="mx-input" rows="3" placeholder="Cole a URL do produto no ML ou descreva o produto que quer analisar..."></textarea>
+        </div>
+        <button class="btn-primary" onclick="runMercadoX()">✨ Analisar com IA</button>
+      </div>
+      <div id="mx-resultado"></div>
+    </div>
+
+    <!-- CALENDARIO -->
+    <div class="page hidden" id="page-cal">
+      <div class="card">
+        <div class="cal-nav">
+          <button class="cal-arrow" onclick="calChangeMonth(-1)">‹</button>
+          <div class="cal-month" id="cal-month-label"></div>
+          <button class="cal-arrow" onclick="calChangeMonth(1)">›</button>
+        </div>
+        <div class="cal-grid" id="cal-header"></div>
+        <div class="cal-grid" id="cal-grid" style="margin-top:4px"></div>
+      </div>
+      <!-- Day detail -->
+      <div id="cal-day-detail" style="display:flex;flex-direction:column;gap:8px"></div>
+    </div>
+
+    <!-- TAREFAS -->
+    <div class="page hidden" id="page-tasks">
+      <div class="tabs">
+        <button class="tab active" onclick="setTaskTab('pendentes',this)">Pendentes</button>
+        <button class="tab" onclick="setTaskTab('hoje',this)">Hoje</button>
+        <button class="tab" onclick="setTaskTab('concluidas',this)">Concluidas</button>
+      </div>
+      <div id="tasks-list" style="display:flex;flex-direction:column;gap:8px"></div>
+    </div>
+
+    <!-- CONTAS -->
+    <div class="page hidden" id="page-contas">
+      <div class="tabs">
+        <button class="tab active" onclick="setContaTab('pagar',this)">A pagar</button>
+        <button class="tab" onclick="setContaTab('receber',this)">A receber</button>
+        <button class="tab" onclick="setContaTab('pagas',this)">Pagas</button>
+      </div>
+      <div id="contas-list" style="display:flex;flex-direction:column;gap:8px"></div>
+    </div>
+  </div>
+
+  <!-- BOTTOM NAV -->
+  <nav class="bottom-nav">
+    <button class="nav-btn active" id="nav-dash" onclick="navTo('dash')">
+      <span class="nav-icon">🏠</span>
+      <span class="nav-label">Inicio</span>
+    </button>
+    <button class="nav-btn" id="nav-mx" onclick="navTo('mx')">
+      <span class="nav-icon">📊</span>
+      <span class="nav-label">MercadoX</span>
+    </button>
+    <button class="nav-btn" id="nav-cal" onclick="navTo('cal')">
+      <span class="nav-icon">📅</span>
+      <span class="nav-label">Agenda</span>
+    </button>
+    <button class="nav-btn" id="nav-tasks" onclick="navTo('tasks')">
+      <span class="nav-icon">✓</span>
+      <span class="nav-label">Tarefas</span>
+      <span class="nav-badge" id="badge-tasks" style="display:none"></span>
+    </button>
+    <button class="nav-btn" id="nav-contas" onclick="navTo('contas')">
+      <span class="nav-icon">💰</span>
+      <span class="nav-label">Contas</span>
+      <span class="nav-badge" id="badge-contas" style="display:none"></span>
+    </button>
+  </nav>
+</div>
+
+<!-- FAB -->
+<button class="fab" id="fab-btn" onclick="openAddModal()">+</button>
+
+<!-- MODAL TAREFA -->
+<div class="mo-overlay" id="mo-task" style="display:none" onclick="if(event.target===this)closeMo('mo-task')">
+  <div class="mo-sheet">
+    <div class="mo-handle"></div>
+    <div class="mo-title">Nova tarefa</div>
+    <div class="mo-body">
+      <div class="f"><label>Titulo</label><input id="t-titulo" type="text" placeholder="O que precisa fazer?"></div>
+      <div class="f-row">
+        <div class="f"><label>Prioridade</label>
+          <select id="t-prio"><option value="alta">🔴 Alta</option><option value="media" selected>🟡 Media</option><option value="baixa">🟢 Baixa</option></select></div>
+        <div class="f"><label>Data</label><input id="t-date" type="date"></div>
+      </div>
+      <div class="f"><label>Area</label>
+        <select id="t-area"><option value="dnc-digital">DNC Digital</option><option value="pessoal">Pessoal</option><option value="consultorio">Consultorio</option></select></div>
+    </div>
+    <div class="mo-footer">
+      <button class="btn-sec" onclick="closeMo('mo-task')">Cancelar</button>
+      <button class="btn-primary" style="flex:1" onclick="salvarTarefa()">Salvar</button>
+    </div>
+  </div>
+</div>
+
+<!-- MODAL CONTA -->
+<div class="mo-overlay" id="mo-conta" style="display:none" onclick="if(event.target===this)closeMo('mo-conta')">
+  <div class="mo-sheet">
+    <div class="mo-handle"></div>
+    <div class="mo-title">Nova conta</div>
+    <div class="mo-body">
+      <div class="f"><label>Descricao</label><input id="c-desc" type="text" placeholder="Ex: Fornecedor, aluguel..."></div>
+      <div class="f-row">
+        <div class="f"><label>Valor (R$)</label><input id="c-val" type="number" min="0" step="0.01" placeholder="0.00"></div>
+        <div class="f"><label>Vencimento</label><input id="c-date" type="date"></div>
+      </div>
+      <div class="f"><label>Tipo</label>
+        <select id="c-tipo"><option value="pagar">A pagar</option><option value="receber">A receber</option></select></div>
+      <div class="f"><label>Categoria</label>
+        <select id="c-cat"><option value="fornecedor">Fornecedor</option><option value="operacional">Operacional</option><option value="pessoal">Pessoal</option><option value="imposto">Imposto</option><option value="marketing">Marketing</option><option value="outros">Outros</option></select></div>
+    </div>
+    <div class="mo-footer">
+      <button class="btn-sec" onclick="closeMo('mo-conta')">Cancelar</button>
+      <button class="btn-primary" style="flex:1" onclick="salvarConta()">Salvar</button>
+    </div>
+  </div>
+</div>
+
+<!-- MODAL DAY EVENTS -->
+<div class="mo-overlay" id="mo-day" style="display:none" onclick="if(event.target===this)closeMo('mo-day')">
+  <div class="mo-sheet">
+    <div class="mo-handle"></div>
+    <div class="mo-title" id="mo-day-title"></div>
+    <div class="mo-body" id="mo-day-body"></div>
+  </div>
+</div>
+
+<script>
+// ── CONSTANTS ─────────────────────────────────────────────────────────────
+const SUPABASE_URL='https://zyidoasvvutddutyezwj.supabase.co';
+const SUPABASE_KEY='sb_publishable_nkRlbfzMKrsc-6pScUsjlg_VleZP0iy';
+const AK='af-apikey';
+const MXCK='dnc-mxconfig';
+
+// ── GLOBALS ───────────────────────────────────────────────────────────────
+let sb=null;
+let tasks=[];
+let contas=[];
+let curNav='dash';
+let taskTab='pendentes';
+let contaTab='pagar';
+let calYear=new Date().getFullYear();
+let calMonth=new Date().getMonth();
+let calSelDay=null;
+let mxLoading=false;
+
+// ── UTILS ─────────────────────────────────────────────────────────────────
+const $=id=>document.getElementById(id);
+const today=()=>new Date().toISOString().slice(0,10);
+const genId=()=>'m'+Date.now().toString(36)+Math.random().toString(36).slice(2,6);
+const fmtBRL=v=>'R$ '+Number(v||0).toLocaleString('pt-BR',{minimumFractionDigits:2,maximumFractionDigits:2});
+const fmtDate=d=>{if(!d)return'';const[y,m,dd]=d.split('-');return`${dd}/${m}/${y}`;};
+const esc=s=>String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+const getApiKey=()=>localStorage.getItem(AK)||'';
+const lsGet=k=>{try{return JSON.parse(localStorage.getItem(k));}catch(e){return null;}};
+const lsSet=(k,v)=>localStorage.setItem(k,JSON.stringify(v));
+
+// ── SUPABASE ──────────────────────────────────────────────────────────────
+async function sbGet(t){
+  if(!sb)return null;
+  try{
+    const{data,error}=await sb.from(t).select('data').eq('id','andre_godoy').single();
+    if(error||!data)return null;
+    return JSON.parse(data.data);
+  }catch(e){return null;}
+}
+async function sbUpsert(t,d){
+  if(!sb)return;
+  try{await sb.from(t).upsert({id:'andre_godoy',data:JSON.stringify(d)},{onConflict:'id'});}
+  catch(e){console.error('sbUpsert',t,e);}
+}
+
+// ── SYNC STATUS ───────────────────────────────────────────────────────────
+function setSyncStatus(st,msg){
+  const dot=$('sync-dot'),label=$('sync-label');
+  dot.className='sync-dot'+(st==='ok'?'':st==='err'?' err':' syncing');
+  label.textContent=st==='ok'?'Sincronizado':st==='err'?'Erro sync':msg||'Sincronizando...';
+}
+
+// ── INIT ──────────────────────────────────────────────────────────────────
+async function init(){
+  try{sb=supabase.createClient(SUPABASE_URL,SUPABASE_KEY);}catch(e){}
+
+  // Load data
+  const[sT,sC]=await Promise.all([sbGet('dnc_tasks'),sbGet('dnc_contas')]);
+  tasks=sT||(lsGet('dnc-tasks-v1')||[]);
+  contas=sC||(lsGet('dnc-contas-v1')||[]);
+
+  setSyncStatus('ok');
+  renderDash();
+  renderCal();
+  updateBadges();
+
+  // Greeting
+  const h=new Date().getHours();
+  $('dash-greeting').textContent=h<12?'Bom dia, André ☀️':h<18?'Boa tarde, André 🌤️':'Boa noite, André 🌙';
+}
+
+// ── NAV ───────────────────────────────────────────────────────────────────
+function navTo(page){
+  document.querySelectorAll('.page').forEach(p=>p.classList.add('hidden'));
+  document.querySelectorAll('.nav-btn').forEach(b=>b.classList.remove('active'));
+  $('page-'+page).classList.remove('hidden');
+  $('nav-'+page)?.classList.add('active');
+  curNav=page;
+
+  // FAB visibility
+  $('fab-btn').style.display=['dash','tasks','contas'].includes(page)?'flex':'none';
+
+  if(page==='dash')renderDash();
+  if(page==='tasks')renderTasks();
+  if(page==='contas')renderContas();
+  if(page==='cal')renderCal();
+
+  // Scroll top
+  document.querySelector('.content').scrollTo(0,0);
+}
+
+function openAddModal(){
+  if(curNav==='tasks'||curNav==='dash')openMo('mo-task');
+  else if(curNav==='contas')openMo('mo-conta');
+}
+
+function openMo(id){
+  $(id).style.display='flex';
+  document.body.style.overflow='hidden';
+  // Set default date
+  const dateField=$(id==='mo-task'?'t-date':'c-date');
+  if(dateField&&!dateField.value)dateField.value=today();
+}
+function closeMo(id){$(id).style.display='none';document.body.style.overflow='';}
+
+// ── BADGES ────────────────────────────────────────────────────────────────
+function updateBadges(){
+  const pendTasks=tasks.filter(t=>t.col!=='done').length;
+  const pendContas=contas.filter(c=>c.status!=='pago'&&c.tipo==='pagar'&&c.date&&c.date<=today()).length;
+
+  const bt=$('badge-tasks'),bc=$('badge-contas');
+  bt.style.display=pendTasks>0?'flex':'none';
+  bt.textContent=pendTasks>9?'9+':pendTasks;
+  bc.style.display=pendContas>0?'flex':'none';
+  bc.textContent=pendContas>9?'9+':pendContas;
+}
+
+// ── DASHBOARD ─────────────────────────────────────────────────────────────
+function renderDash(){
+  const t=today();
+  const pendTasks=tasks.filter(x=>x.col!=='done');
+  const todayTasks=pendTasks.filter(x=>x.date===t);
+  const overdue=pendTasks.filter(x=>x.date&&x.date<t);
+  const pagar=contas.filter(x=>x.tipo==='pagar'&&x.status!=='pago');
+  const proxPagar=pagar.filter(x=>x.date&&x.date<=new Date(Date.now()+7*864e5).toISOString().slice(0,10));
+  const totalPagar=pagar.reduce((s,x)=>s+(x.valor||0),0);
+
+  $('dash-cards').innerHTML=`
+    <div class="card" onclick="navTo('tasks')" style="cursor:pointer">
+      <div class="card-title">Tarefas</div>
+      <div class="card-value">${pendTasks.length}</div>
+      <div class="card-sub">${overdue.length>0?`<span style="color:var(--red)">${overdue.length} atrasadas</span>`:'Em dia ✓'}</div>
+    </div>
+    <div class="card" onclick="navTo('contas')" style="cursor:pointer">
+      <div class="card-title">A pagar</div>
+      <div class="card-value" style="font-size:20px">${fmtBRL(totalPagar)}</div>
+      <div class="card-sub">${proxPagar.length} vencem em 7 dias</div>
+    </div>`;
+
+  // Today tasks
+  const ttel=$('dash-tasks-today');
+  if(todayTasks.length===0){
+    ttel.innerHTML=`<div class="empty"><div class="empty-icon">✅</div><div class="empty-text">Nenhuma tarefa para hoje</div></div>`;
+  } else {
+    ttel.innerHTML=todayTasks.slice(0,3).map(t=>taskItem(t,true)).join('');
+  }
+
+  // Bills due next 7 days
+  const bel=$('dash-bills');
+  if(proxPagar.length===0){
+    bel.innerHTML=`<div class="empty"><div class="empty-icon">💸</div><div class="empty-text">Sem contas nos proximos 7 dias</div></div>`;
+  } else {
+    bel.innerHTML=proxPagar.slice(0,3).map(c=>contaItem(c,true)).join('');
+  }
+}
+
+// ── TASKS ─────────────────────────────────────────────────────────────────
+function setTaskTab(tab,el){
+  taskTab=tab;
+  document.querySelectorAll('#page-tasks .tab').forEach(b=>b.classList.remove('active'));
+  el.classList.add('active');
+  renderTasks();
+}
+
+function renderTasks(){
+  const t=today();
+  let list=[];
+  if(taskTab==='pendentes')list=tasks.filter(x=>x.col!=='done');
+  else if(taskTab==='hoje')list=tasks.filter(x=>x.col!=='done'&&x.date===t);
+  else list=tasks.filter(x=>x.col==='done').slice(-30);
+
+  list.sort((a,b)=>{
+    const po={alta:0,media:1,baixa:2};
+    if(a.date&&!b.date)return-1;if(!a.date&&b.date)return 1;
+    if(a.date&&b.date&&a.date!==b.date)return a.date.localeCompare(b.date);
+    return(po[a.prio]||1)-(po[b.prio]||1);
+  });
+
+  const el=$('tasks-list');
+  if(!list.length){
+    el.innerHTML=`<div class="empty"><div class="empty-icon">📋</div><div class="empty-text">${taskTab==='hoje'?'Nenhuma tarefa para hoje':taskTab==='concluidas'?'Nenhuma tarefa concluida':'Nenhuma tarefa pendente'}</div></div>`;
+    return;
+  }
+  el.innerHTML=list.map(t=>taskItem(t,false)).join('');
+}
+
+function taskItem(t,compact){
+  const isLate=t.date&&t.date<today()&&t.col!=='done';
+  const isDone=t.col==='done';
+  return`<div class="item${isDone?' done':''}" style="gap:10px">
+    <div class="chk${isDone?' checked':''}" onclick="toggleTask('${t.id}');event.stopPropagation()">${isDone?'✓':''}</div>
+    <div class="item-body">
+      <div class="item-title">${esc(t.title||'Sem titulo')}</div>
+      ${!compact?`<div class="item-sub">${t.area||''} ${t.date?'· '+fmtDate(t.date):''}</div>`:''}
+    </div>
+    <div style="display:flex;flex-direction:column;align-items:flex-end;gap:4px">
+      <div class="prio prio-${t.prio||'media'}"></div>
+      ${isLate?'<span class="badge badge-red">Atrasada</span>':''}
+    </div>
+  </div>`;
+}
+
+async function toggleTask(id){
+  const t=tasks.find(x=>x.id===id);
+  if(!t)return;
+  t.col=t.col==='done'?'todo':'done';
+  setSyncStatus('syncing');
+  lsSet('dnc-tasks-v1',tasks);
+  await sbUpsert('dnc_tasks',tasks);
+  setSyncStatus('ok');
+  renderTasks();
+  updateBadges();
+  if(curNav==='dash')renderDash();
+}
+
+async function salvarTarefa(){
+  const title=$('t-titulo').value.trim();
+  if(!title){alert('Informe o titulo.');return;}
+  const t={
+    id:genId(),col:'todo',
+    title,
+    prio:$('t-prio').value,
+    area:$('t-area').value,
+    date:$('t-date').value||'',
+    desc:'',resp:''
+  };
+  tasks.push(t);
+  $('t-titulo').value='';$('t-date').value='';
+  closeMo('mo-task');
+  setSyncStatus('syncing');
+  lsSet('dnc-tasks-v1',tasks);
+  await sbUpsert('dnc_tasks',tasks);
+  setSyncStatus('ok');
+  renderTasks();
+  updateBadges();
+  if(curNav==='dash')renderDash();
+}
+
+// ── CONTAS ────────────────────────────────────────────────────────────────
+function setContaTab(tab,el){
+  contaTab=tab;
+  document.querySelectorAll('#page-contas .tab').forEach(b=>b.classList.remove('active'));
+  el.classList.add('active');
+  renderContas();
+}
+
+function renderContas(){
+  let list=[];
+  const t=today();
+  if(contaTab==='pagar')list=contas.filter(x=>x.tipo==='pagar'&&x.status!=='pago');
+  else if(contaTab==='receber')list=contas.filter(x=>x.tipo==='receber'&&x.status!=='pago');
+  else list=contas.filter(x=>x.status==='pago').slice(-30);
+
+  list.sort((a,b)=>(a.date||'').localeCompare(b.date||''));
+
+  const el=$('contas-list');
+  if(!list.length){
+    el.innerHTML=`<div class="empty"><div class="empty-icon">💸</div><div class="empty-text">Nenhuma conta aqui</div></div>`;
+    return;
+  }
+  el.innerHTML=list.map(c=>contaItem(c,false)).join('');
+}
+
+function contaItem(c,compact){
+  const isLate=c.date&&c.date<today()&&c.status!=='pago';
+  const isPago=c.status==='pago';
+  const colorClass=c.tipo==='receber'?'badge-green':'badge-amber';
+  return`<div class="item">
+    <div style="font-size:20px">${c.tipo==='receber'?'📥':'📤'}</div>
+    <div class="item-body">
+      <div class="item-title">${esc(c.desc||'Sem descricao')}</div>
+      <div class="item-sub">${c.cat||''} ${c.date?'· Venc '+fmtDate(c.date):''}</div>
+    </div>
+    <div style="text-align:right">
+      <div class="item-val" style="color:${c.tipo==='receber'?'var(--green)':'var(--red)'}">${fmtBRL(c.valor)}</div>
+      ${isPago
+        ?'<span class="badge badge-green">Pago</span>'
+        :isLate
+          ?`<button onclick="marcarPago('${c.id}');event.stopPropagation()" style="margin-top:4px;padding:3px 10px;background:var(--red);border:none;border-radius:6px;font-size:10px;font-weight:700;color:#fff;cursor:pointer;font-family:var(--font)">Vencida</button>`
+          :`<button onclick="marcarPago('${c.id}');event.stopPropagation()" style="margin-top:4px;padding:3px 10px;background:rgba(224,116,40,.15);border:1px solid var(--accent);border-radius:6px;font-size:10px;font-weight:700;color:var(--accent);cursor:pointer;font-family:var(--font)">Pagar</button>`
+      }
+    </div>
+  </div>`;
+}
+
+async function marcarPago(id){
+  const c=contas.find(x=>x.id===id);
+  if(!c)return;
+  c.status='pago';c.dataPag=today();
+  setSyncStatus('syncing');
+  lsSet('dnc-contas-v1',contas);
+  await sbUpsert('dnc_contas',contas);
+  setSyncStatus('ok');
+  renderContas();
+  updateBadges();
+  if(curNav==='dash')renderDash();
+}
+
+async function salvarConta(){
+  const desc=$('c-desc').value.trim();
+  const valor=Number($('c-val').value)||0;
+  if(!desc){alert('Informe a descricao.');return;}
+  const c={
+    id:genId(),
+    desc,valor,
+    tipo:$('c-tipo').value,
+    cat:$('c-cat').value,
+    date:$('c-date').value||'',
+    status:'pendente',
+    recorrente:false
+  };
+  contas.push(c);
+  $('c-desc').value='';$('c-val').value='';$('c-date').value='';
+  closeMo('mo-conta');
+  setSyncStatus('syncing');
+  lsSet('dnc-contas-v1',contas);
+  await sbUpsert('dnc_contas',contas);
+  setSyncStatus('ok');
+  renderContas();
+  updateBadges();
+}
+
+// ── CALENDARIO ────────────────────────────────────────────────────────────
+function calChangeMonth(d){
+  calMonth+=d;
+  if(calMonth>11){calMonth=0;calYear++;}
+  if(calMonth<0){calMonth=11;calYear--;}
+  renderCal();
+}
+
+function renderCal(){
+  const months=['Janeiro','Fevereiro','Março','Abril','Maio','Junho','Julho','Agosto','Setembro','Outubro','Novembro','Dezembro'];
+  $('cal-month-label').textContent=`${months[calMonth]} ${calYear}`;
+
+  // DOW headers
+  $('cal-header').innerHTML=['D','S','T','Q','Q','S','S'].map(d=>`<div class="cal-dow">${d}</div>`).join('');
+
+  // Build event map
+  const evMap={};
+  tasks.forEach(t=>{
+    if(t.date&&t.col!=='done'){
+      evMap[t.date]=evMap[t.date]||[];
+      evMap[t.date].push({type:'task',color:'var(--blue)',label:t.title});
+    }
+  });
+  contas.forEach(c=>{
+    if(c.date&&c.status!=='pago'){
+      evMap[c.date]=evMap[c.date]||[];
+      evMap[c.date].push({type:'conta',color:c.tipo==='receber'?'var(--green)':'var(--red)',label:c.desc});
+    }
+  });
+
+  const first=new Date(calYear,calMonth,1);
+  const last=new Date(calYear,calMonth+1,0);
+  const startDow=first.getDay();
+  const t=today();
+
+  let html='';
+  // Empty cells before
+  for(let i=0;i<startDow;i++){
+    const prev=new Date(calYear,calMonth,0-startDow+i+1);
+    const ds=prev.toISOString().slice(0,10);
+    html+=calDayHtml(prev.getDate(),ds,true,evMap[ds]||[],t);
+  }
+  // Days of month
+  for(let d=1;d<=last.getDate();d++){
+    const ds=`${calYear}-${String(calMonth+1).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
+    html+=calDayHtml(d,ds,false,evMap[ds]||[],t);
+  }
+  // Fill remaining
+  const total=startDow+last.getDate();
+  const rem=total%7===0?0:7-total%7;
+  for(let d=1;d<=rem;d++){
+    const ds=new Date(calYear,calMonth+1,d).toISOString().slice(0,10);
+    html+=calDayHtml(d,ds,true,evMap[ds]||[],t);
+  }
+
+  $('cal-grid').innerHTML=html;
+  if(calSelDay)renderDayDetail(calSelDay,evMap[calSelDay]||[]);
+}
+
+function calDayHtml(d,ds,otherMonth,evs,t){
+  const isToday=ds===t;
+  const isSel=ds===calSelDay;
+  const dots=evs.slice(0,3).map(e=>`<div class="cal-dot" style="background:${e.color}"></div>`).join('');
+  return`<div class="cal-day${isToday?' today':isSel?' selected':otherMonth?' other-month':''}" onclick="calSelectDay('${ds}')">${d}${dots?`<div class="cal-dots">${dots}</div>`:''}</div>`;
+}
+
+function calSelectDay(ds){
+  calSelDay=calSelDay===ds?null:ds;
+  renderCal();
+}
+
+function renderDayDetail(ds,evs){
+  const el=$('cal-day-detail');
+  if(!evs.length){el.innerHTML='';return;}
+  const[y,m,d]=ds.split('-');
+  el.innerHTML=`<div style="font-size:13px;font-weight:700;color:var(--text3);margin-bottom:4px">${d}/${m}/${y}</div>`+
+    evs.map(e=>`<div class="day-event">
+      <div class="cal-dot" style="background:${e.color};width:8px;height:8px"></div>
+      <span style="font-size:13px;color:var(--text2)">${esc(e.label)}</span>
+    </div>`).join('');
+}
+
+// ── MERCADOX ──────────────────────────────────────────────────────────────
+async function runMercadoX(){
+  const input=$('mx-input')?.value.trim();
+  if(!input){alert('Descreva o produto ou cole a URL.');return;}
+  const apiKey=getApiKey();
+  if(!apiKey){
+    $('mx-resultado').innerHTML=`<div class="card" style="color:var(--red)">Configure a API Key do Claude no DNC Flow desktop primeiro (Configuracoes → Geral).</div>`;
+    return;
+  }
+
+  const cfg=lsGet(MXCK)||{};
+  mxLoading=true;
+  $('mx-resultado').innerHTML=`<div class="card" style="text-align:center;padding:24px"><div class="spin" style="margin:0 auto 12px"></div><div style="color:var(--text3)">Analisando com IA...</div></div>`;
+
+  const prompt=`Você é o MercadoX, especialista em análise de produtos para Mercado Livre.
+
+Analise este produto para venda no ML Brasil:
+${input}
+
+Configurações do vendedor:
+- Margem mínima: ${cfg.margemMinima||25}%
+- Vendas mínimas/90d: ${cfg.vendasMin||500}
+- Taxa clássico: ${cfg.taxaClassico||11.5}%
+
+Responda em JSON com esta estrutura exata:
+{
+  "veredicto": "APROVADO" | "REPROVADO" | "REVISAR",
+  "pontuacao": 0-100,
+  "motivo_principal": "uma frase",
+  "demanda": "ALTA|MEDIA|BAIXA",
+  "concorrencia": "ALTA|MEDIA|BAIXA",
+  "preco_sugerido": 00.00,
+  "margem_estimada": 00,
+  "pontos_positivos": ["item1","item2","item3"],
+  "pontos_atencao": ["item1","item2"],
+  "recomendacao": "2-3 frases de orientação"
+}`;
+
+  try{
+    const res=await fetch('https://api.anthropic.com/v1/messages',{
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({model:'claude-sonnet-4-20250514',max_tokens:1000,messages:[{role:'user',content:prompt}]})
+    });
+    const data=await res.json();
+    const text=(data.content||[]).filter(b=>b.type==='text').map(b=>b.text).join('');
+    const clean=text.replace(/```json|```/g,'').trim();
+    const r=JSON.parse(clean);
+    renderMxResult(r,input);
+  }catch(e){
+    $('mx-resultado').innerHTML=`<div class="card" style="color:var(--red)">Erro: ${e.message}</div>`;
+  }
+  mxLoading=false;
+}
+
+function renderMxResult(r,input){
+  const vClass=r.veredicto==='APROVADO'?'aprovado':r.veredicto==='REPROVADO'?'reprovado':'revisar';
+  const vColor=r.veredicto==='APROVADO'?'var(--green)':r.veredicto==='REPROVADO'?'var(--red)':'var(--amber)';
+  const vIcon=r.veredicto==='APROVADO'?'✅':r.veredicto==='REPROVADO'?'❌':'⚠️';
+
+  $('mx-resultado').innerHTML=`
+    <div class="mx-verdict ${vClass}">
+      <span style="font-size:28px">${vIcon}</span>
+      <div>
+        <div style="font-size:16px;font-weight:900;color:${vColor}">${r.veredicto}</div>
+        <div style="font-size:12px;color:var(--text2)">${esc(r.motivo_principal||'')}</div>
+      </div>
+      <div style="margin-left:auto;text-align:right">
+        <div style="font-size:22px;font-weight:900;color:${vColor}">${r.pontuacao||0}</div>
+        <div style="font-size:10px;color:var(--text3)">pts</div>
+      </div>
+    </div>
+
+    <div class="cards-grid">
+      <div class="card">
+        <div class="card-title">Preco sugerido</div>
+        <div class="card-value" style="font-size:20px">${fmtBRL(r.preco_sugerido)}</div>
+        <div class="card-sub">Margem ~${r.margem_estimada||0}%</div>
+      </div>
+      <div class="card">
+        <div class="card-title">Demanda</div>
+        <div class="card-value" style="font-size:18px;color:${r.demanda==='ALTA'?'var(--green)':r.demanda==='BAIXA'?'var(--red)':'var(--amber)'}">${r.demanda||'—'}</div>
+        <div class="card-sub">Concorr: ${r.concorrencia||'—'}</div>
+      </div>
+    </div>
+
+    ${r.pontos_positivos?.length?`
+    <div class="card">
+      <div class="card-title" style="color:var(--green)">Pontos positivos</div>
+      ${r.pontos_positivos.map(p=>`<div style="font-size:13px;color:var(--text2);padding:4px 0;border-bottom:1px solid var(--border)">✓ ${esc(p)}</div>`).join('')}
+    </div>`:''}
+
+    ${r.pontos_atencao?.length?`
+    <div class="card">
+      <div class="card-title" style="color:var(--amber)">Pontos de atencao</div>
+      ${r.pontos_atencao.map(p=>`<div style="font-size:13px;color:var(--text2);padding:4px 0;border-bottom:1px solid var(--border)">⚠ ${esc(p)}</div>`).join('')}
+    </div>`:''}
+
+    ${r.recomendacao?`
+    <div class="card">
+      <div class="card-title">Recomendacao</div>
+      <div style="font-size:13px;color:var(--text2);line-height:1.6">${esc(r.recomendacao)}</div>
+    </div>`:''}
+
+    <button class="btn-sec" onclick="$('mx-input').value='';$('mx-resultado').innerHTML=''" style="width:100%">Nova analise</button>
+  `;
+}
+
+// ── BOOT ──────────────────────────────────────────────────────────────────
+init();
+</script>
+</body>
+</html>
