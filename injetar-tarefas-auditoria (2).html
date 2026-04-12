@@ -1,0 +1,139 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>DNC Flow — Auditoria de Engenharia</title>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:Inter,sans-serif;background:#0f0a06;color:#f5ede6;padding:20px;min-height:100vh}
+h1{font-size:20px;font-weight:900;color:#e07428;margin-bottom:2px}
+.sub{font-size:12px;color:#9a7060;margin-bottom:20px}
+.card{background:#1a0e05;border:1px solid rgba(255,255,255,.08);border-radius:10px;padding:12px 14px;margin-bottom:8px;border-left:3px solid}
+.card.crit{border-left-color:#ef4444}.card.high{border-left-color:#f97316}.card.med{border-left-color:#f59e0b}.card.low{border-left-color:#22c55e}
+.tag{display:inline-block;padding:1px 7px;border-radius:5px;font-size:9px;font-weight:800;margin-right:5px;text-transform:uppercase}
+.tag.crit{background:rgba(239,68,68,.2);color:#ef4444}
+.tag.high{background:rgba(249,115,22,.2);color:#f97316}
+.tag.med{background:rgba(245,158,11,.2);color:#f59e0b}
+.tag.low{background:rgba(34,197,94,.2);color:#22c55e}
+.fixed{display:inline-block;padding:1px 7px;border-radius:5px;font-size:9px;font-weight:800;background:rgba(34,197,94,.15);color:#22c55e;margin-left:4px}
+.card-title{font-size:13px;font-weight:700;margin:4px 0 3px}
+.card-desc{font-size:11px;color:#9a7060;line-height:1.55}
+.sec{font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:.1em;padding:14px 0 6px;border-bottom:1px solid rgba(255,255,255,.06);margin-bottom:10px}
+.sec.crit{color:#ef4444}.sec.high{color:#f97316}.sec.med{color:#f59e0b}.sec.low{color:#22c55e}
+.stats{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:20px}
+.stat{background:#1a0e05;border:1px solid rgba(255,255,255,.08);border-radius:8px;padding:10px;text-align:center}
+.stat-n{font-size:22px;font-weight:900}.stat-l{font-size:10px;color:#9a7060;margin-top:2px}
+.btn{padding:14px;background:#e07428;border:none;border-radius:10px;font-size:14px;font-weight:800;color:#1a0e05;cursor:pointer;width:100%;font-family:Inter,sans-serif;margin-top:12px}
+.btn:disabled{opacity:.5;cursor:not-allowed}
+#status{padding:14px;border-radius:10px;font-size:13px;font-weight:600;margin-top:12px;display:none;line-height:1.6}
+.ok{background:rgba(34,197,94,.1);border:1px solid rgba(34,197,94,.25);color:#22c55e}
+.err{background:rgba(239,68,68,.1);border:1px solid rgba(239,68,68,.25);color:#ef4444}
+.warn{background:rgba(245,158,11,.1);border:1px solid rgba(245,158,11,.25);color:#f59e0b}
+</style>
+</head>
+<body>
+<h1>🔍 Auditoria DNC Flow — Engenheiro Sênior</h1>
+<div class="sub">20 problemas identificados. 6 já corrigidos nesta versão. Clique em Injetar para criar todas as tarefas no app.</div>
+
+<div class="stats">
+  <div class="stat"><div class="stat-n" style="color:#ef4444">2</div><div class="stat-l">Críticos</div></div>
+  <div class="stat"><div class="stat-n" style="color:#f97316">10</div><div class="stat-l">Altos</div></div>
+  <div class="stat"><div class="stat-n" style="color:#f59e0b">7</div><div class="stat-l">Médios</div></div>
+  <div class="stat"><div class="stat-n" style="color:#22c55e">1</div><div class="stat-l">Baixos</div></div>
+</div>
+
+<div class="sec crit">🔴 Críticos</div>
+<div class="card crit"><div><span class="tag crit">CRÍTICO</span><span style="font-size:9px;color:#6a5040">DADOS</span></div><div class="card-title">Padrão blob Supabase vai estourar em 1MB e perder todos os dados</div><div class="card-desc">Todos os dados (tasks, contas, ranking) num único JSON por tabela. Limite: 1MB. Com 1 ano de uso o save para silenciosamente sem aviso. Guarda de tamanho adicionada. Migração para rows individuais é obrigatória na Fase 2.</div></div>
+<div class="card crit"><div><span class="tag crit">CRÍTICO</span><span style="font-size:9px;color:#6a5040">ARQUITETURA</span></div><div class="card-title">41 variáveis globais mutáveis sem controle de estado</div><div class="card-desc">tasks, contas, mlToken, mlOrders modificáveis por qualquer função. Bugs de estado se multiplicam com o crescimento. Solução na Fase 2: React + Zustand/Context.</div></div>
+
+<div class="sec high">🟠 Altos</div>
+<div class="card high"><div><span class="tag high">ALTO</span><span class="fixed">✓ CORRIGIDO</span></div><div class="card-title">Bug de fuso horário — datas deslocavam 1 dia no Brasil (GMT-3)</div><div class="card-desc">mobile.html usava toISOString() UTC. Às 22h local, a data UTC já é amanhã. Contas vencidas apareciam no dia errado. Corrigido com getFullYear/getMonth/getDate (hora local).</div></div>
+<div class="card high"><div><span class="tag high">ALTO</span><span class="fixed">✓ CORRIGIDO</span></div><div class="card-title">Race condition em saves simultâneos sobrescrevia dados</div><div class="card-desc">Dois saves em menos de 400ms: segundo sobrescrevia o primeiro no Supabase. Corrigido: debounce 400ms em saveTasks/saveContas. localStorage ainda salva imediatamente.</div></div>
+<div class="card high"><div><span class="tag high">ALTO</span><span class="fixed">✓ CORRIGIDO</span></div><div class="card-title">Token ML expirava sem aviso — app mostrava "sem dados"</div><div class="card-desc">mlCheckToken() adicionado. Banner vermelho aparece quando token expirado, clicável para reconexão imediata.</div></div>
+<div class="card high"><div><span class="tag high">ALTO</span><span class="fixed">✓ CORRIGIDO</span></div><div class="card-title">sbUpsert sem guarda de tamanho — perda silenciosa de dados</div><div class="card-desc">Aviso no console em 800KB, bloqueio em 1MB com mensagem clara. Solução permanente é migração na Fase 2.</div></div>
+<div class="card high"><div><span class="tag high">ALTO</span></div><div class="card-title">628 pedidos ML renderizados de uma vez — trava em mobile</div><div class="card-desc">renderMLPedidos() cria 628+ DOM nodes sem paginação. Implementar: 50 por página com "Ver mais", ou virtualização.</div></div>
+<div class="card high"><div><span class="tag high">ALTO</span></div><div class="card-title">XSS potencial em onClick strings com dados de usuário/ML API</div><div class="card-desc">Títulos de anúncios ML com aspas simples dentro de onclick="..." quebram JS. Revisar todas as 45 funções render* para esc() em campos de usuário.</div></div>
+<div class="card high"><div><span class="tag high">ALTO</span></div><div class="card-title">Verificar RLS ativa em TODAS as tabelas Supabase — URGENTE</div><div class="card-desc">Anon key pública no GitHub. Sem RLS qualquer pessoa lê/escreve via REST. Verificar 13 tabelas agora no Supabase > Authentication > Policies.</div></div>
+<div class="card high"><div><span class="tag high">ALTO</span></div><div class="card-title">mobile.html duplica lógica — bugs corrigidos no desktop não chegam ao mobile</div><div class="card-desc">Extrair shared.js com: genId, fmtBRL, sbGet, sbUpsert, today, esc. Carregado por ambos. Ou migrar para app único responsivo na Fase 2.</div></div>
+<div class="card high"><div><span class="tag high">ALTO</span></div><div class="card-title">Sem validação de schema ao carregar dados — JSON corrompido quebra tudo</div><div class="card-desc">tasks=sT sem verificar se é array. Adicionar guards: if(!Array.isArray(x))return[]. Validar campos obrigatórios por entidade.</div></div>
+<div class="card high"><div><span class="tag high">ALTO</span></div><div class="card-title">Zero testes em funções financeiras — calcDAS() errado = perda real de dinheiro</div><div class="card-desc">calcPrecificacao, calcDAS, daysUntil sem testes. Implementar 20 casos mínimos com Vitest.</div></div>
+
+<div class="sec med">🟡 Médios</div>
+<div class="card med"><div><span class="tag med">MÉDIO</span><span class="fixed">✓ CORRIGIDO</span></div><div class="card-title">Filtros calendário não persistiam entre navegações</div><div class="card-desc">Agora salva em localStorage e restaura ao carregar. Validar: desativar "Pessoal", navegar e voltar.</div></div>
+<div class="card med"><div><span class="tag med">MÉDIO</span><span class="fixed">✓ CORRIGIDO</span></div><div class="card-title">Painel de precificação não fechava ao trocar de seção</div><div class="card-desc">nav() agora chama closePrecPanel() antes de navegar.</div></div>
+<div class="card med"><div><span class="tag med">MÉDIO</span><span class="fixed">✓ CORRIGIDO</span></div><div class="card-title">Diagnóstico ML sem timeout — travava infinitamente em 3G</div><div class="card-desc">AbortController de 15s adicionado. Exibe erro acionável após timeout.</div></div>
+<div class="card med"><div><span class="tag med">MÉDIO</span></div><div class="card-title">PIN armazenado em plaintext no localStorage</div><div class="card-desc">Implementar SHA-256 via crypto.subtle. Nunca armazenar PIN direto.</div></div>
+<div class="card med"><div><span class="tag med">MÉDIO</span></div><div class="card-title">App offline falha mesmo com dados em localStorage</div><div class="card-desc">Sem Service Worker. CDNs não carregam sem internet. Implementar sw.js com cache de assets.</div></div>
+<div class="card med"><div><span class="tag med">MÉDIO</span></div><div class="card-title">Claude API sem retry — JSON inválido quebra UI</div><div class="card-desc">Implementar wrapper callClaude() com 1 retry automático e validação de schema de resposta.</div></div>
+<div class="card med"><div><span class="tag med">MÉDIO</span></div><div class="card-title">Ranking e ML Orders crescem sem limite definido</div><div class="card-desc">Implementar rotina de limpeza mensal: orders >180 dias, keywords deletadas, snapshots excedentes.</div></div>
+
+<div class="sec low">🟢 Baixos</div>
+<div class="card low"><div><span class="tag low">BAIXO</span></div><div class="card-title">Sidebar reconstrói DOM centenas de vezes por sessão desnecessariamente</div><div class="card-desc">Adicionar dirty flag: renderSidebar() só executa quando areas, members ou curNav mudam.</div></div>
+
+<button class="btn" id="btn" onclick="injetar()">🚀 Injetar 20 tarefas de auditoria no DNC Flow</button>
+<div id="status"></div>
+
+<script>
+const sb=supabase.createClient('https://zyidoasvvutddutyezwj.supabase.co','sb_publishable_nkRlbfzMKrsc-6pScUsjlg_VleZP0iy');
+const gid=()=>'aud'+Date.now().toString(36)+Math.random().toString(36).slice(2,5);
+const td=()=>{const d=new Date();return`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;};
+const tdN=n=>{const d=new Date();d.setDate(d.getDate()+n);return`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;};
+
+const TASKS=[
+  {prio:'alta',date:td(),title:'[CRITICO] Planejar migracao Supabase de blob para rows individuais — Fase 2',desc:'Padrao atual (1 JSON gigante por tabela) vai estourar em 1MB com 1 ano de uso. Cada task/conta deve ser 1 row. Guarda de tamanho adicionada como protecao temporaria. Migracao obrigatoria na Fase 2 React+Vite.'},
+  {prio:'alta',date:td(),title:'[CRITICO] Planejar migracao de estado global para gerenciamento centralizado',desc:'41 variaveis globais mutaveis sem controle. Definir arquitetura de estado para Fase 2: React Context ou Zustand. Documentar quais variaveis sao estado de UI vs dados persistidos.'},
+  {prio:'alta',date:td(),title:'[ALTO OK] Bug fuso horario datas mobile — CORRIGIDO — validar em producao',desc:'mobile.html usava toISOString() UTC. Corrigido para hora local. Validar: criar tarefa para hoje no mobile e verificar que aparece no dia correto no desktop.'},
+  {prio:'alta',date:td(),title:'[ALTO OK] Race condition saves simultaneos — CORRIGIDO — validar em producao',desc:'Debounce 400ms adicionado em saveTasks e saveContas. Validar: criar tarefa e marcar outra como concluida rapidamente — verificar que ambas persistem no Supabase.'},
+  {prio:'alta',date:td(),title:'[ALTO OK] Token ML expira sem aviso — CORRIGIDO — validar banner em producao',desc:'mlCheckToken() adicionado com banner vermelho clicavel. Validar: verificar que banner aparece quando token expirar e redireciona para reconexao.'},
+  {prio:'alta',date:td(),title:'[ALTO OK] sbUpsert sem guarda de tamanho — CORRIGIDO — monitorar console',desc:'Aviso em 800KB e bloqueio em 1MB adicionados. Monitorar console por avisos. Solucao permanente e migracao para rows na Fase 2.'},
+  {prio:'alta',date:tdN(7),title:'[ALTO] Implementar paginacao na lista de pedidos ML — 628 DOM nodes',desc:'renderMLPedidos cria 628+ nodes de uma vez. Implementar: mostrar 50 pedidos por pagina com botao Ver mais 50, ou virtualizacao com IntersectionObserver. Alta prioridade para performance mobile.'},
+  {prio:'alta',date:tdN(7),title:'[ALTO] Auditoria XSS em todas as funcoes render — esc() obrigatorio',desc:'Revisar 45 funcoes render para garantir esc() em todos os campos dentro de onclick. Foco: t.title, c.desc, p.nome, kw.kw. Titulos ML com aspas quebram JS inline.'},
+  {prio:'alta',date:td(),title:'[ALTO URGENTE] Verificar RLS ativa em TODAS as 13 tabelas Supabase',desc:'Anon key publica no GitHub. Sem RLS qualquer pessoa le e escreve. Verificar agora no Supabase Authentication Policies: dnc_tasks, dnc_contas, dnc_procs, dnc_areas, dnc_members, dnc_estoque, dnc_estoque_mov, dnc_produtos, dnc_cost_fields, dnc_ml_orders, dnc_titulo_grupos, dnc_ranking, dnc_saldos.'},
+  {prio:'alta',date:tdN(14),title:'[ALTO] Criar shared.js com logica comum entre desktop e mobile',desc:'genId, fmtBRL, sbGet, sbUpsert, today, esc duplicados. Extrair para shared.js carregado por ambos. Bug corrigido num arquivo afeta automaticamente o outro.'},
+  {prio:'alta',date:tdN(7),title:'[ALTO] Validacao de schema ao carregar dados do Supabase',desc:'tasks=sT sem verificar se e array. Adicionar: if(!Array.isArray(x))return[]. Validar campos obrigatorios por entidade. JSON corrompido quebra o app silenciosamente.'},
+  {prio:'alta',date:tdN(14),title:'[ALTO] Implementar testes minimos para funcoes financeiras criticas',desc:'calcDAS, calcPrecificacao, daysUntil sem testes. Uma mudanca silenciosa resulta em precificacao errada e perda real de dinheiro. Usar Vitest: 20 casos de teste para as 5 funcoes mais criticas.'},
+  {prio:'media',date:td(),title:'[MEDIO OK] Filtros calendario nao persistiam — CORRIGIDO — validar',desc:'calFilters agora salva em localStorage. Validar: desativar Pessoal no calendario, navegar para Tarefas e voltar — filtro deve continuar desativado.'},
+  {prio:'media',date:td(),title:'[MEDIO OK] Painel precificacao nao fechava ao navegar — CORRIGIDO',desc:'nav() agora chama closePrecPanel(). Validar: abrir calculadora de um produto, clicar em Tarefas na sidebar — painel deve fechar.'},
+  {prio:'media',date:td(),title:'[MEDIO OK] Diagnostico ML sem timeout — CORRIGIDO — validar em conexao lenta',desc:'AbortController de 15s adicionado. Validar em conexao lenta: deve mostrar erro apos 15s em vez de travar.'},
+  {prio:'media',date:tdN(14),title:'[MEDIO] Implementar hash SHA-256 para o PIN',desc:'PIN em plaintext no localStorage. Implementar: hash = await crypto.subtle.digest SHA-256. Comparar hashes, nunca armazenar PIN direto. Manter retrocompatibilidade no primeiro login.'},
+  {prio:'media',date:tdN(14),title:'[MEDIO] Service Worker para funcionamento offline basico',desc:'App quebra sem internet mesmo com dados locais. Implementar sw.js com cache de: supabase-js, chart.js, Inter font, index.html, mobile.html.'},
+  {prio:'media',date:tdN(14),title:'[MEDIO] Retry automatico e validacao de schema na Claude API',desc:'gerarTitulosIA e runMercadoX sem retry. JSON mal-formado quebra UI. Implementar wrapper callClaude() com 1 retry automatico apos 2s e validacao de schema de resposta.'},
+  {prio:'media',date:tdN(14),title:'[MEDIO] Rotina de limpeza de dados antigos no Supabase',desc:'ML orders e ranking crescem sem limite. Implementar botao em Configuracoes > Manutencao: limpar orders >180 dias, snapshots excedentes, keywords de items deletados.'},
+  {prio:'baixa',date:null,title:'[BAIXO] Otimizar renderSidebar com dirty flag',desc:'Sidebar reconstroi DOM centenas de vezes por sessao. Adicionar dirty flag: renderSidebar so executa quando areas, members ou curNav mudam.'},
+];
+
+async function injetar(){
+  const btn=document.getElementById('btn');
+  const status=document.getElementById('status');
+  btn.disabled=true;btn.textContent='Conectando ao Supabase...';
+  status.style.display='block';status.className='warn';status.textContent='Carregando tarefas existentes...';
+  try{
+    const{data,error}=await sb.from('dnc_tasks').select('data').eq('id','andre_godoy').single();
+    let existing=[];
+    if(!error&&data?.data){try{existing=JSON.parse(data.data);}catch(e){}}
+    if(!Array.isArray(existing))existing=[];
+    status.textContent=`${existing.length} tarefas carregadas. Verificando duplicatas...`;
+    const existingTitles=new Set(existing.map(t=>(t.title||'').slice(0,40)));
+    const toAdd=TASKS.filter(t=>!existingTitles.has(t.title.slice(0,40)));
+    if(toAdd.length===0){
+      status.className='ok';
+      status.innerHTML='✅ Todas as tarefas de auditoria ja existem. Nenhuma duplicata criada.';
+      btn.textContent='✓ Ja injetado';return;
+    }
+    const newTasks=toAdd.map(t=>({id:gid(),col:'todo',area:'dnc-digital',prio:t.prio,title:t.title,desc:t.desc,date:t.date||'',resp:'andre'}));
+    const merged=[...existing,...newTasks];
+    const{error:e2}=await sb.from('dnc_tasks').upsert({id:'andre_godoy',data:JSON.stringify(merged)},{onConflict:'id'});
+    if(e2){status.className='err';status.textContent='Erro: '+JSON.stringify(e2);btn.disabled=false;btn.textContent='Tentar novamente';return;}
+    status.className='ok';
+    status.innerHTML=`✅ ${newTasks.length} tarefas criadas! Total: ${merged.length}<br><span style="font-size:11px;opacity:.8">Abra o DNC Flow → Tarefas para ver todas. ✓ = ja corrigido nesta versao.</span>`;
+    btn.textContent='✓ Concluido — pode fechar';
+  }catch(e){
+    status.className='err';status.textContent='Erro: '+e.message;
+    btn.disabled=false;btn.textContent='Tentar novamente';
+  }
+}
+</script>
+</body>
+</html>
